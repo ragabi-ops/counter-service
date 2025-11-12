@@ -23,12 +23,16 @@ spec:
 {{- end }}
     spec:
       serviceAccountName: {{ default (include "counter-service.fullname" .) .Values.serviceAccount.name }}
+
+      # --- Scheduling configuration ---
       nodeSelector:
-      {{ toYaml .Values.nodeSelector | indent 8 }}
-            affinity:
-      {{ toYaml .Values.affinity | indent 8 }}
-            tolerations:
-      {{ toYaml .Values.tolerations | indent 8 }}
+{{ toYaml .Values.nodeSelector | indent 8 }}
+      affinity:
+{{ toYaml .Values.affinity | indent 8 }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 8 }}
+      # ---------------------------------
+
       containers:
         - name: app
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -50,7 +54,7 @@ spec:
             periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
           resources:
 {{- if .Values.resources }}
-{{ toYaml .Values.resources | indent 20 }}
+{{ toYaml .Values.resources | indent 12 }}
 {{- else }}
             {}
 {{- end }}

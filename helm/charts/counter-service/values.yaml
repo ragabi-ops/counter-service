@@ -32,6 +32,7 @@ ingress:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    alb.ingress.kubernetes.io/subnets: "subnet-0d43e51397c767948,subnet-08258da1763e0034e"
   hosts:
     - paths:
         - path: /
