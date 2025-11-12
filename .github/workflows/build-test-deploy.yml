@@ -42,6 +42,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Save the built image to a tarball for reuse
+      - name: Save Docker image
+        run: |
+          mkdir -p /tmp/docker-cache
+          docker save local/${{ env.ECR_REPOSITORY }}:${{ steps.set-tag.outputs.image_tag }} -o /tmp/docker-cache/image.tar
+
+      # Cache the image between jobs
+      - name: Cache built image
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-cache/image.tar
+          key: docker-image-${{ github.sha }}
+
   # Stage 2: Test
   test:
     needs: build
@@ -72,12 +85,24 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Restore cached Docker image
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-cache/image.tar
+          key: docker-image-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Load cached Docker image
+        run: docker load -i /tmp/docker-cache/image.tar
+
       - name: Tag and push image to ECR
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
           docker tag local/${ECR_REPOSITORY}:${IMAGE_TAG} $REGISTRY/${ECR_REPOSITORY}:${IMAGE_TAG}
           docker push $REGISTRY/${ECR_REPOSITORY}:${IMAGE_TAG}
+          docker tag $REGISTRY/${ECR_REPOSITORY}:${IMAGE_TAG} $REGISTRY/${ECR_REPOSITORY}:latest
+          docker push $REGISTRY/${ECR_REPOSITORY}:latest
 
       - name: Output deployed image info
         run: |

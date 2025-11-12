@@ -26,7 +26,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Determine the tag to use (either provided or auto-generated)
       - name: Determine image tag
         id: tag
         run: |
@@ -35,17 +34,31 @@ jobs:
             echo "tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
           else
             BRANCH=$(echo "${GITHUB_REF##*/}" | tr '/' '-')
-            echo "No image_tag provided. Building image with tag ${BRANCH}-${GITHUB_RUN_NUMBER}"
+            echo "No image_tag provided. Building new image ${BRANCH}-${GITHUB_RUN_NUMBER}"
             echo "tag=${BRANCH}-${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
           fi
 
-      # Build image only if running standalone (no image_tag provided)
+      # Restore cached Docker image if exists
+      - name: Restore cached image
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-cache/image.tar
+          key: docker-image-${{ github.sha }}
+          restore-keys: docker-image-
+
+      - name: Load cached Docker image
+        if: hashFiles('/tmp/docker-cache/image.tar') != ''
+        run: |
+          echo "Loading cached image from /tmp/docker-cache/image.tar"
+          docker load -i /tmp/docker-cache/image.tar
+
+      # Build image only if cache was not found
       - name: Set up Docker Buildx
-        if: ${{ inputs.image_tag == '' }}
+        if: hashFiles('/tmp/docker-cache/image.tar') == '' && inputs.image_tag == ''
         uses: docker/setup-buildx-action@v3
 
-      - name: Build image locally
-        if: ${{ inputs.image_tag == '' }}
+      - name: Build image locally (no cache found)
+        if: hashFiles('/tmp/docker-cache/image.tar') == '' && inputs.image_tag == ''
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -58,13 +71,11 @@ jobs:
       - name: List local images
         run: docker images || true
 
-      # Run container and test health
       - name: Run container (bridge network)
         run: |
           docker rm -f counter-service 2>/dev/null || true
-
           IMAGE="local/${ECR_REPOSITORY}:${{ steps.tag.outputs.tag }}"
-          echo "Using image: $IMAGE"
+          echo "Running container from image: $IMAGE"
 
           if ! docker image inspect "$IMAGE" > /dev/null 2>&1; then
             echo "ERROR: Image $IMAGE not found locally."
