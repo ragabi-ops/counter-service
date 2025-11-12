@@ -142,7 +142,7 @@ jobs:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
           HELM_RELEASE="counter-service"
-          CHART_PATH="charts/counter-service"
+          CHART_PATH="helm/charts/counter-service"
           IMAGE_REPO="$REGISTRY/${ECR_REPOSITORY}"
 
           # (Optional) show chart version
