@@ -31,7 +31,7 @@ jobs:
           BRANCH=$(echo "${GITHUB_REF##*/}" | tr '/' '-')
           echo "image_tag=${BRANCH}-${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
 
-      - name: Build image (and load locally)
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -41,16 +41,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Save built Docker image to cache path
+      - name: Save image to tarball
         run: |
           mkdir -p /tmp/docker-cache
           docker save local/${{ env.ECR_REPOSITORY }}:${{ steps.set-tag.outputs.image_tag }} -o /tmp/docker-cache/image.tar
           ls -lh /tmp/docker-cache
 
-      - name: Cache Docker image for test and deploy
+      - name: Cache Docker image tarball
         uses: actions/cache@v4
         with:
-          path: /tmp/docker-cache
+          path: /tmp/docker-cache/image.tar
           key: docker-image-${{ github.sha }}
 
   test:
@@ -81,21 +81,21 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Restore Docker cache
+      - name: Restore cached Docker image tarball
         uses: actions/cache@v4
         with:
-          path: /tmp/docker-cache
+          path: /tmp/docker-cache/image.tar
           key: docker-image-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Load cached Docker image
         run: |
+          echo "Restoring docker image tarball from cache..."
           if [ -f /tmp/docker-cache/image.tar ]; then
-            echo "Loading cached Docker image..."
             docker load -i /tmp/docker-cache/image.tar
           else
-            echo "ERROR: Cached image not found at /tmp/docker-cache/image.tar"
-            ls -R /tmp/docker-cache || true
+            echo "ERROR: Cached image not found in /tmp/docker-cache"
+            find / -type f -name "image.tar" 2>/dev/null | head -n 10
             exit 1
           fi
 
