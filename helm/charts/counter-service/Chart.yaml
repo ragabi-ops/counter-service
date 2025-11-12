@@ -1,0 +1,6 @@
+apiVersion: v2
+name: counter-service
+description: A tiny Flask counter service exposed via AWS ALB (HTTP only, no DNS)
+version: 0.2.0
+appVersion: "0.2.0"
+type: application
