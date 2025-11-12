@@ -14,7 +14,6 @@ env:
   ECR_REPOSITORY: counter-service
 
 jobs:
-  # Stage 1: Build
   build:
     runs-on: ubuntu-latest
     outputs:
@@ -32,7 +31,7 @@ jobs:
           BRANCH=$(echo "${GITHUB_REF##*/}" | tr '/' '-')
           echo "image_tag=${BRANCH}-${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
 
-      - name: Build image (and load locally)
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -42,7 +41,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Stage 2: Test
+      - name: Save image to tarball
+        run: |
+          mkdir -p /tmp/docker-cache
+          docker save local/${{ env.ECR_REPOSITORY }}:${{ steps.set-tag.outputs.image_tag }} -o /tmp/docker-cache/image.tar
+          ls -lh /tmp/docker-cache
+
+      - name: Cache Docker image tarball
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-cache/image.tar
+          key: docker-image-${{ github.sha }}
+
   test:
     needs: build
     uses: ./.github/workflows/test-run.yml
@@ -50,7 +60,6 @@ jobs:
       image_tag: ${{ needs.build.outputs.image_tag }}
     secrets: inherit
 
-  # Stage 3: Deploy to AWS ECR
   deploy:
     runs-on: ubuntu-latest
     needs: [build, test]
@@ -72,12 +81,32 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Restore cached Docker image tarball
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-cache/image.tar
+          key: docker-image-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Load cached Docker image
+        run: |
+          echo "Restoring docker image tarball from cache..."
+          if [ -f /tmp/docker-cache/image.tar ]; then
+            docker load -i /tmp/docker-cache/image.tar
+          else
+            echo "ERROR: Cached image not found in /tmp/docker-cache"
+            find / -type f -name "image.tar" 2>/dev/null | head -n 10
+            exit 1
+          fi
+
       - name: Tag and push image to ECR
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
           docker tag local/${ECR_REPOSITORY}:${IMAGE_TAG} $REGISTRY/${ECR_REPOSITORY}:${IMAGE_TAG}
           docker push $REGISTRY/${ECR_REPOSITORY}:${IMAGE_TAG}
+          docker tag $REGISTRY/${ECR_REPOSITORY}:${IMAGE_TAG} $REGISTRY/${ECR_REPOSITORY}:latest
+          docker push $REGISTRY/${ECR_REPOSITORY}:latest
 
       - name: Output deployed image info
         run: |
