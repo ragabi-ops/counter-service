@@ -14,7 +14,6 @@ env:
   ECR_REPOSITORY: counter-service
 
 jobs:
-  # Stage 1: Build
   build:
     runs-on: ubuntu-latest
     outputs:
@@ -42,20 +41,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Save the built image to a tarball for reuse
-      - name: Save Docker image
+      - name: Save built Docker image to cache path
         run: |
           mkdir -p /tmp/docker-cache
           docker save local/${{ env.ECR_REPOSITORY }}:${{ steps.set-tag.outputs.image_tag }} -o /tmp/docker-cache/image.tar
+          ls -lh /tmp/docker-cache
 
-      # Cache the image between jobs
-      - name: Cache built image
+      - name: Cache Docker image for test and deploy
         uses: actions/cache@v4
         with:
-          path: /tmp/docker-cache/image.tar
+          path: /tmp/docker-cache
           key: docker-image-${{ github.sha }}
 
-  # Stage 2: Test
   test:
     needs: build
     uses: ./.github/workflows/test-run.yml
@@ -63,7 +60,6 @@ jobs:
       image_tag: ${{ needs.build.outputs.image_tag }}
     secrets: inherit
 
-  # Stage 3: Deploy to AWS ECR
   deploy:
     runs-on: ubuntu-latest
     needs: [build, test]
@@ -85,15 +81,23 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Restore cached Docker image
+      - name: Restore Docker cache
         uses: actions/cache@v4
         with:
-          path: /tmp/docker-cache/image.tar
+          path: /tmp/docker-cache
           key: docker-image-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Load cached Docker image
-        run: docker load -i /tmp/docker-cache/image.tar
+        run: |
+          if [ -f /tmp/docker-cache/image.tar ]; then
+            echo "Loading cached Docker image..."
+            docker load -i /tmp/docker-cache/image.tar
+          else
+            echo "ERROR: Cached image not found at /tmp/docker-cache/image.tar"
+            ls -R /tmp/docker-cache || true
+            exit 1
+          fi
 
       - name: Tag and push image to ECR
         env:
