@@ -5,12 +5,7 @@ on:
     branches: [ master ]
   push:
     branches: [ master ]
-  workflow_dispatch:
-    inputs:
-      ref:
-        description: "Git ref (branch or tag) to run against default to UI Ref"
-        required: false
-        default: ""
+  workflow_dispatch:  # allows manual run from any branch via UI
 
 permissions:
   contents: read
@@ -20,19 +15,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout (honor manual 'ref' if provided)
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build image (local)
+      - name: Build image (local and load)
         uses: docker/build-push-action@v6
         with:
           context: .
           push: false
+          load: true 
           tags: local/counter-service:test
 
       - name: Run container (bridge network)
@@ -50,7 +44,7 @@ jobs:
               echo "Health check passed"
               exit 0
             fi
-            echo "Waiting for app... ($i/30) got $code"
+            echo "⏳ Waiting for app... ($i/30) got $code"
             sleep 2
           done
           echo "Health check FAILED"
