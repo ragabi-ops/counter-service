@@ -4,8 +4,8 @@ on:
   workflow_call:
     inputs:
       image_tag:
-        description: "Tag of the local image to test"
-        required: true
+        description: "Tag of the local image to test (optional for standalone)"
+        required: false
         type: string
   pull_request:
     branches: [ master ]
@@ -19,17 +19,60 @@ permissions:
 jobs:
   build-run-healthcheck:
     runs-on: ubuntu-latest
+    env:
+      ECR_REPOSITORY: counter-service
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Ensure image exists (debug)
+      # Determine the tag to use (either provided or auto-generated)
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "Using provided image tag: ${{ inputs.image_tag }}"
+            echo "tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
+          else
+            BRANCH=$(echo "${GITHUB_REF##*/}" | tr '/' '-')
+            echo "No image_tag provided. Building image with tag ${BRANCH}-${GITHUB_RUN_NUMBER}"
+            echo "tag=${BRANCH}-${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
+          fi
+
+      # Build image only if running standalone (no image_tag provided)
+      - name: Set up Docker Buildx
+        if: ${{ inputs.image_tag == '' }}
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image locally
+        if: ${{ inputs.image_tag == '' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: local/${{ env.ECR_REPOSITORY }}:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: List local images
         run: docker images || true
 
+      # Run container and test health
       - name: Run container (bridge network)
         run: |
-          docker rm -f counter-service || true
-          docker run -d --name counter-service --network bridge -p 8080:80 local/counter-service:${{ inputs.image_tag }}
+          docker rm -f counter-service 2>/dev/null || true
+
+          IMAGE="local/${ECR_REPOSITORY}:${{ steps.tag.outputs.tag }}"
+          echo "Using image: $IMAGE"
+
+          if ! docker image inspect "$IMAGE" > /dev/null 2>&1; then
+            echo "ERROR: Image $IMAGE not found locally."
+            docker images
+            exit 1
+          fi
+
+          docker run -d --name counter-service --network bridge -p 8080:80 "$IMAGE"
 
       - name: Health check (retry for readiness)
         shell: bash
@@ -47,6 +90,10 @@ jobs:
           echo "Health check FAILED"
           docker logs counter-service || true
           exit 1
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker logs counter-service || true
 
       - name: Stop container
         if: always()
