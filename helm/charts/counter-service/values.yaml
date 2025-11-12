@@ -1,3 +1,5 @@
+fullnameOverride: counter-service
+
 image:
   repository: "098779063279.dkr.ecr.eu-west-1.amazonaws.com/counter-service"
   tag: "latest"
@@ -32,7 +34,18 @@ ingress:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
-    alb.ingress.kubernetes.io/subnets: "subnet-0d43e51397c767948,subnet-08258da1763e0034e"
+    alb.ingress.kubernetes.io/subnets: "subnet-076e9013fb30d4620,subnet-0907e093de0fdcf62"
+
+    # Health checks (recommended)
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+    alb.ingress.kubernetes.io/healthcheck-port: traffic-port
+    alb.ingress.kubernetes.io/success-codes: "200-399"
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
+
   hosts:
     - paths:
         - path: /
@@ -40,18 +53,18 @@ ingress:
 
 serviceAccount:
   create: false
-  name: ""
+  name: "default"
   annotations: {}
 
 livenessProbe:
   enabled: true
-  path: /healthz
+  path: /healthz        
   initialDelaySeconds: 5
   periodSeconds: 10
 
 readinessProbe:
   enabled: true
-  path: /
+  path: /healthz        
   initialDelaySeconds: 3
   periodSeconds: 5
 

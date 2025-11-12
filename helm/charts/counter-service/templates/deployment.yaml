@@ -22,7 +22,11 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
     spec:
-      serviceAccountName: {{ default (include "counter-service.fullname" .) .Values.serviceAccount.name }}
+{{- if .Values.serviceAccount.name }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+{{- else if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "counter-service.fullname" . }}
+{{- end }}
 
       # --- Scheduling configuration ---
       nodeSelector:
@@ -42,7 +46,7 @@ spec:
               containerPort: 80
           readinessProbe:
             httpGet:
-              path: {{ .Values.readinessProbe.path }}
+              path: {{ .Values.readinessProbe.path }}   
               port: http
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
