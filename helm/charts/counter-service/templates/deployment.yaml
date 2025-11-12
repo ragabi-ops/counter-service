@@ -23,6 +23,12 @@ spec:
 {{- end }}
     spec:
       serviceAccountName: {{ default (include "counter-service.fullname" .) .Values.serviceAccount.name }}
+      nodeSelector:
+      {{ toYaml .Values.nodeSelector | indent 8 }}
+            affinity:
+      {{ toYaml .Values.affinity | indent 8 }}
+            tolerations:
+      {{ toYaml .Values.tolerations | indent 8 }}
       containers:
         - name: app
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

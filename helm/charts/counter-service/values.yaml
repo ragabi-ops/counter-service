@@ -19,7 +19,8 @@ resources:
 
 nodeSelector: {}
 affinity: {}
-tolerations: []
+tolerations:
+  - operator: "Exists"
 
 podAnnotations: {}
 
