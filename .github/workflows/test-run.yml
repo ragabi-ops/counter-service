@@ -30,12 +30,13 @@ jobs:
         id: tag
         run: |
           if [ -n "${{ inputs.image_tag }}" ]; then
-            echo "Using provided image tag: ${{ inputs.image_tag }}"
+            echo "Using provided image tag from parent workflow: ${{ inputs.image_tag }}"
             echo "tag=${{ inputs.image_tag }}" >> $GITHUB_OUTPUT
           else
             BRANCH=$(echo "${GITHUB_REF##*/}" | tr '/' '-')
-            echo "No image_tag provided, building new image ${BRANCH}-${GITHUB_RUN_NUMBER}"
-            echo "tag=${BRANCH}-${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
+            TAG="${BRANCH}-${GITHUB_RUN_NUMBER}"
+            echo "No image_tag provided; generated tag: $TAG"
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
           fi
 
       - name: Restore cached Docker image tarball
@@ -50,15 +51,16 @@ jobs:
           if [ -f /tmp/docker-cache/image.tar ]; then
             echo "Loading cached Docker image..."
             docker load -i /tmp/docker-cache/image.tar
+            docker images | grep ${{ env.ECR_REPOSITORY }} || true
           else
-            echo "No cached Docker image found, will rebuild."
+            echo "No cached Docker image found; will rebuild if needed."
           fi
 
       - name: Set up Docker Buildx
         if: hashFiles('/tmp/docker-cache/image.tar') == '' && inputs.image_tag == ''
         uses: docker/setup-buildx-action@v3
 
-      - name: Build image locally (no cache found)
+      - name: Build image locally (if no cache found)
         if: hashFiles('/tmp/docker-cache/image.tar') == '' && inputs.image_tag == ''
         uses: docker/build-push-action@v6
         with:
@@ -77,11 +79,13 @@ jobs:
           docker rm -f counter-service 2>/dev/null || true
           IMAGE="local/${ECR_REPOSITORY}:${{ steps.tag.outputs.tag }}"
           echo "Running container from image: $IMAGE"
+
           if ! docker image inspect "$IMAGE" > /dev/null 2>&1; then
             echo "ERROR: Image $IMAGE not found locally."
             docker images
             exit 1
           fi
+
           docker run -d --name counter-service --network bridge -p 8080:80 "$IMAGE"
 
       - name: Health check (retry for readiness)
