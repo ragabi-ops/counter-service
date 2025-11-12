@@ -1,11 +1,17 @@
 name: test-run
 
 on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Tag of the local image to test"
+        required: true
+        type: string
   pull_request:
     branches: [ master ]
   push:
     branches: [ master ]
-  workflow_dispatch:  # allows manual run from any branch via UI
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,26 +19,17 @@ permissions:
 jobs:
   build-run-healthcheck:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build image (local and load)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: false
-          load: true 
-          tags: local/counter-service:test
+      - name: Ensure image exists (debug)
+        run: docker images || true
 
       - name: Run container (bridge network)
         run: |
           docker rm -f counter-service || true
-          docker run -d --name counter-service --network bridge -p 8080:80 local/counter-service:test
+          docker run -d --name counter-service --network bridge -p 8080:80 local/counter-service:${{ inputs.image_tag }}
 
       - name: Health check (retry for readiness)
         shell: bash
@@ -44,16 +41,12 @@ jobs:
               echo "Health check passed"
               exit 0
             fi
-            echo "⏳ Waiting for app... ($i/30) got $code"
+            echo "Waiting for app... ($i/30) got $code"
             sleep 2
           done
           echo "Health check FAILED"
           docker logs counter-service || true
           exit 1
-
-      - name: Show logs
-        if: failure()
-        run: docker logs counter-service || true
 
       - name: Stop container
         if: always()
