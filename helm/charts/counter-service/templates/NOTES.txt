@@ -1,0 +1,9 @@
+1. Get the ALB DNS name provisioned by the AWS Load Balancer Controller:
+
+   kubectl -n {{ .Release.Namespace }} get ingress {{ include "counter-service.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'; echo
+
+2. Access the app over HTTP using that DNS name, for example:
+
+   curl http://$(kubectl -n {{ .Release.Namespace }} get ingress {{ include "counter-service.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')/
+
+3. If the hostname is empty, wait a minute and try again (ALB provisioning may take time).
